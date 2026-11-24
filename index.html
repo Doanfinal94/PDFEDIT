@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PDF All-in-One: Xem, Sửa, Gộp & Tách</title>
+  <link rel="icon" type="image/png" href="logo.png" />
+  <link rel="manifest" href="manifest.json" />
+
+  <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --success: #16a34a;
+      --danger: #dc2626;
+      --bg: #e2e8f0;
+      --panel: #ffffff;
+      --border: #cbd5e1;
+      --text: #1e293b;
+      --muted: #64748b;
+    }
+    * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, sans-serif; }
+    body { margin: 0; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+    .app-nav {
+      background: #0f172a; color: #fff; padding: 0 16px;
+      display: flex; align-items: center; justify-content: space-between;
+      height: 46px; flex-shrink: 0;
+    }
+    .app-brand { font-weight: 700; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+    .nav-tabs { display: flex; gap: 6px; height: 100%; align-items: flex-end; }
+    .nav-tab {
+      background: transparent; color: #94a3b8; border: none; border-radius: 8px 8px 0 0;
+      padding: 9px 18px; font-size: 13px; font-weight: 600; cursor: pointer;
+    }
+    .nav-tab:hover { color: #fff; background: rgba(255,255,255,0.08); }
+    .nav-tab.active { background: #fff; color: var(--primary); }
+
+    .app-view { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+    .app-view.active { display: flex; }
+
+    button {
+      padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border);
+      background: #fff; color: var(--text); font-size: 13px; font-weight: 600;
+      cursor: pointer; transition: 0.15s; display: inline-flex; align-items: center; gap: 4px;
+    }
+    button:hover:not(:disabled) { background: #f1f5f9; }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    button.active { background: #dbeafe; border-color: var(--primary); color: var(--primary); }
+    .btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
+    .btn-success { background: var(--success); color: #fff; border-color: var(--success); }
+    .btn-success:hover:not(:disabled) { background: #15803d; }
+    .btn-danger { color: var(--danger); border-color: #fecaca; }
+    .btn-danger:hover:not(:disabled) { background: #fef2f2; }
+
+    .topbar {
+      background: var(--panel); border-bottom: 1px solid var(--border);
+      padding: 8px 14px; display: flex; flex-wrap: wrap; gap: 8px;
+      align-items: center; justify-content: space-between; z-index: 20;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.05); flex-shrink: 0;
+    }
+    .group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .divider { width: 1px; height: 24px; background: var(--border); margin: 0 4px; }
+
+    input[type="color"] { width: 30px; height: 30px; border: 1px solid var(--border); border-radius: 6px; padding: 2px; cursor: pointer; background: #fff; }
+    select, input[type="text"] { padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: #fff; }
+
+    .workspace { display: flex; flex: 1; overflow: hidden; }
+    .sidebar {
+      width: 170px; background: #f8fafc; border-right: 1px solid var(--border);
+      overflow-y: auto; padding: 12px 10px; display: flex; flex-direction: column; gap: 10px;
+    }
+    .thumb-item {
+      background: #fff; border: 2px solid transparent; border-radius: 8px;
+      padding: 6px; cursor: pointer; text-align: center;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+    .thumb-item:hover { border-color: #94a3b8; }
+    .thumb-item.active { border-color: var(--primary); background: #eff6ff; }
+    .thumb-item img { width: 100%; height: auto; display: block; border-radius: 4px; }
+    .thumb-label { font-size: 12px; font-weight: 600; color: var(--muted); margin-top: 4px; }
+    .thumb-item.active .thumb-label { color: var(--primary); }
+
+    .viewer { flex: 1; overflow: auto; display: flex; justify-content: center; align-items: flex-start; padding: 24px; }
+    .empty-state {
+      margin: auto; text-align: center; background: #fff; padding: 40px 50px;
+      border-radius: 12px; border: 2px dashed #94a3b8; cursor: pointer;
+    }
+    .empty-state:hover { border-color: var(--primary); background: #eff6ff; }
+    .empty-state h2 { margin: 0 0 8px; color: var(--primary); font-size: 19px; }
+    .empty-state p { margin: 0; color: var(--muted); font-size: 13px; }
+
+    .stage-wrap { position: relative; box-shadow: 0 6px 24px rgba(0,0,0,0.18); background: #fff; display: none; }
+    #pdf-canvas { display: block; }
+    .canvas-container { position: absolute !important; top: 0; left: 0; }
+
+    .statusbar {
+      background: var(--panel); border-top: 1px solid var(--border);
+      padding: 6px 16px; font-size: 12px; color: var(--muted);
+      display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
+    }
+    #status-text, #org-status { font-weight: 600; color: var(--primary); }
+
+    .org-main { flex: 1; overflow-y: auto; padding: 20px; }
+    .org-container { max-width: 1360px; margin: 0 auto; }
+    .dropzone {
+      border: 2px dashed #94a3b8; border-radius: 12px; padding: 24px;
+      text-align: center; background: #fff; cursor: pointer; transition: 0.2s; margin-bottom: 16px;
+    }
+    .dropzone:hover, .dropzone.dragover { border-color: var(--primary); background: #eff6ff; }
+    .dropzone strong { color: var(--primary); font-size: 15px; }
+    .dropzone p { margin: 6px 0 0; color: var(--muted); font-size: 13px; }
+
+    .org-summary { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 13px; color: var(--muted); }
+    .page-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); gap: 16px; }
+    .page-card {
+      background: #fff; border: 2px solid transparent; border-radius: 10px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.07); padding: 10px;
+      display: flex; flex-direction: column; cursor: grab; user-select: none;
+    }
+    .page-card:active { cursor: grabbing; }
+    .page-card.selected { border-color: var(--primary); background: #eff6ff; }
+    .sortable-ghost { opacity: 0.35; border: 2px dashed var(--primary); }
+    .card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .order-badge { background: var(--text); color: #fff; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 12px; }
+    .page-card.selected .order-badge { background: var(--primary); }
+    .card-check { width: 17px; height: 17px; cursor: pointer; accent-color: var(--primary); }
+    .thumb-wrap {
+      width: 100%; height: 200px; background: #e2e8f0; border-radius: 6px;
+      display: flex; align-items: center; justify-content: center; overflow: hidden; margin-bottom: 8px;
+    }
+    .thumb-wrap img { max-width: 100%; max-height: 100%; object-fit: contain; transition: transform 0.2s; pointer-events: none; }
+    .card-info { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 8px; text-align: center; }
+    .card-actions { display: flex; gap: 6px; }
+    .icon-btn { flex: 1; padding: 5px; font-size: 12px; justify-content: center; }
+  </style>
+</head>
+<body>
+
+  <div class="app-nav">
+    <div class="app-brand">📄 PDF All-in-One</div>
+    <div class="nav-tabs">
+      <button class="nav-tab active" id="tab-btn-editor" onclick="switchMainTab('editor')">✏️ Xem & Sửa PDF</button>
+      <button class="nav-tab" id="tab-btn-organizer" onclick="switchMainTab('organizer')">📑 Gộp & Tách PDF</button>
+    </div>
+  </div>
+
+  <!-- TAB 1: XEM & SỬA PDF -->
+  <div id="view-editor" class="app-view active">
+    <div class="topbar">
+      <div class="group">
+        <button class="btn-primary" onclick="document.getElementById('pdf-input').click()">📂 Mở PDF</button>
+        <input type="file" id="pdf-input" accept="application/pdf" hidden />
+        <button class="btn-success" id="btn-export" onclick="exportEditedPDF()" disabled>💾 Xuất PDF</button>
+      </div>
+
+      <div class="group">
+        <button class="tool-btn active" data-tool="select">👆 Chọn</button>
+        <button class="tool-btn" data-tool="text">🔤 Chữ</button>
+        <button class="tool-btn" data-tool="whiteout">⬜ Tẩy trắng</button>
+        <button class="tool-btn" data-tool="draw">✏️ Bút</button>
+        <button class="tool-btn" data-tool="highlight">🖍️ Dạ quang</button>
+        <button class="tool-btn" data-tool="rect">▭ Khung</button>
+        <button class="tool-btn" data-tool="circle">◯ Tròn</button>
+        <button class="tool-btn" data-tool="arrow">↗️ Mũi tên</button>
+        <button id="btn-img" onclick="document.getElementById('img-input').click()" disabled>🖼️ Chèn ảnh</button>
+        <input type="file" id="img-input" accept="image/*" hidden />
+      </div>
+
+      <div class="group">
+        <input type="color" id="color-picker" value="#dc2626" title="Màu nét / Màu chữ" />
+        <select id="size-picker">
+          <option value="2">Mảnh (16px)</option>
+          <option value="4" selected>Vừa (22px)</option>
+          <option value="7">Đậm (30px)</option>
+          <option value="12">Rất đậm (42px)</option>
+        </select>
+        <div class="divider"></div>
+        <button id="btn-undo" onclick="undo()" disabled>↩️ Undo</button>
+        <button class="btn-danger" id="btn-del" onclick="deleteSelectedObj()" disabled>🗑️ Xóa</button>
+        <div class="divider"></div>
+        <button id="btn-zoom-out" onclick="changeZoom(-0.2)" disabled>➖</button>
+        <span id="zoom-label" style="font-size:13px;font-weight:600;min-width:44px;text-align:center;">100%</span>
+        <button id="btn-zoom-in" onclick="changeZoom(0.2)" disabled>➕</button>
+      </div>
+    </div>
+
+    <div class="workspace">
+      <div class="sidebar" id="sidebar"></div>
+      <div class="viewer" id="viewer">
+        <div class="empty-state" id="empty-state" onclick="document.getElementById('pdf-input').click()">
+          <h2>Mở file PDF để xem & chỉnh sửa</h2>
+          <p>Kéo thả file PDF vào đây hoặc bấm để chọn • Xử lý 100% tại máy</p>
+        </div>
+        <div class="stage-wrap" id="stage-wrap">
+          <canvas id="pdf-canvas"></canvas>
+          <canvas id="anno-canvas"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="statusbar">
+      <div id="page-info">Chưa mở file nào</div>
+      <div id="status-text"></div>
+    </div>
+  </div>
+
+  <!-- TAB 2: GỘP & TÁCH PDF -->
+  <div id="view-organizer" class="app-view">
+    <div class="topbar">
+      <div class="group">
+        <button class="btn-primary" onclick="document.getElementById('org-input').click()">+ Thêm file PDF</button>
+        <button onclick="orgSelectAll(true)" id="btn-sel-all" disabled>Chọn hết</button>
+        <button onclick="orgSelectAll(false)" id="btn-desel" disabled>Bỏ chọn</button>
+        <button class="btn-danger" onclick="orgDeleteSelected()" id="btn-del-sel" disabled>Xóa đã chọn</button>
+        <button class="btn-danger" onclick="orgClearAll()" id="btn-clear" disabled>Xóa tất cả</button>
+      </div>
+      <div class="group">
+        <input type="text" id="out-name" value="PDF_Ket_Qua" placeholder="Tên file xuất..." style="width:180px;" />
+        <button class="btn-success" onclick="orgExportPDF(false)" id="btn-export-all" disabled>Gộp toàn bộ (.PDF)</button>
+        <button class="btn-primary" onclick="orgExportPDF(true)" id="btn-export-sel" disabled>Tách đã chọn (.PDF)</button>
+        <button onclick="orgExportZip()" id="btn-export-zip" disabled>Tách lẻ (.ZIP)</button>
+      </div>
+    </div>
+
+    <div class="org-main">
+      <div class="org-container">
+        <div class="dropzone" id="org-dropzone" onclick="document.getElementById('org-input').click()">
+          <strong>Kéo thả nhiều file PDF vào đây (hoặc bấm để chọn)</strong>
+          <p>Kéo thả trực tiếp các ô trang bên dưới để sắp xếp thứ tự • Xoay, xóa, gộp hoặc tách lẻ</p>
+          <input type="file" id="org-input" accept="application/pdf" multiple hidden />
+        </div>
+        <div class="org-summary">
+          <div id="org-summary-text">Chưa có trang nào.</div>
+          <div id="org-status"></div>
+        </div>
+        <div class="page-grid" id="page-grid"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const { PDFDocument, degrees } = PDFLib;
+
+    function switchMainTab(tab) {
+      document.getElementById('tab-btn-editor').classList.toggle('active', tab === 'editor');
+      document.getElementById('tab-btn-organizer').classList.toggle('active', tab === 'organizer');
+      document.getElementById('view-editor').classList.toggle('active', tab === 'editor');
+      document.getElementById('view-organizer').classList.toggle('active', tab === 'organizer');
+    }
+
+    function downloadBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    // PHẦN 1: XEM & SỬA PDF
+    let originalPdfBytes = null, originalFileName = 'TaiLieu.pdf', pdfJsDoc = null;
+    let currentPage = 1, totalPages = 0, currentZoom = 1.2;
+    let baseSizes = {}, pageAnnotations = {}, historyStack = [], isRestoringHistory = false;
+    let currentTool = 'select', isDrawingShape = false, shapeStart = null, activeShape = null;
+
+    const pdfCanvas = document.getElementById('pdf-canvas');
+    const pdfCtx = pdfCanvas.getContext('2d');
+    const fabricCanvas = new fabric.Canvas('anno-canvas', { preserveObjectStacking: true });
+    const setEditorStatus = (msg) => document.getElementById('status-text').textContent = msg;
+
+    document.getElementById('pdf-input').addEventListener('change', e => {
+      if (e.target.files[0]) loadPDF(e.target.files[0]);
+      e.target.value = '';
+    });
+
+    const viewerEl = document.getElementById('viewer');
+    viewerEl.addEventListener('dragover', e => e.preventDefault());
+    viewerEl.addEventListener('drop', e => {
+      e.preventDefault();
+      const file = e.dataTransfer.files[0];
+      if (file && (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'))) loadPDF(file);
+    });
+
+    async function loadPDF(file) {
+      setEditorStatus('Đang tải file PDF...');
+      try {
+        originalFileName = file.name;
+        originalPdfBytes = new Uint8Array(await file.arrayBuffer());
+        pdfJsDoc = await pdfjsLib.getDocument({ data: originalPdfBytes.slice() }).promise;
+        totalPages = pdfJsDoc.numPages;
+        currentPage = 1;
+        pageAnnotations = {};
+        baseSizes = {};
+
+        document.getElementById('empty-state').style.display = 'none';
+        document.getElementById('stage-wrap').style.display = 'block';
+        ['btn-export', 'btn-img', 'btn-undo', 'btn-del', 'btn-zoom-in', 'btn-zoom-out'].forEach(id => {
+          document.getElementById(id).disabled = false;
+        });
+
+        await buildSidebar();
+        await renderPage(1);
+        setEditorStatus('Đã mở thành công!');
+        setTimeout(() => setEditorStatus(''), 2000);
+      } catch (err) {
+        alert('Lỗi khi mở PDF: ' + err.message);
+        setEditorStatus('');
+      }
+    }
+
+    async function buildSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      sidebar.innerHTML = '';
+      for (let i = 1; i <= totalPages; i++) {
+        const page = await pdfJsDoc.getPage(i);
+        const baseVp = page.getViewport({ scale: 1.0 });
+        baseSizes[i] = { width: baseVp.width, height: baseVp.height };
+
+        const thumbVp = page.getViewport({ scale: 0.25 });
+        const c = document.createElement('canvas');
+        c.width = thumbVp.width; c.height = thumbVp.height;
+        await page.render({ canvasContext: c.getContext('2d'), viewport: thumbVp }).promise;
+
+        const div = document.createElement('div');
+        div.className = 'thumb-item' + (i === 1 ? ' active' : '');
+        div.dataset.page = i;
+        div.innerHTML = `<img src="${c.toDataURL('image/jpeg', 0.75)}" /><div class="thumb-label">Trang ${i}</div>`;
+        div.onclick = () => switchPage(i);
+        sidebar.appendChild(div);
+      }
+    }
+
+    async function switchPage(num) {
+      if (num === currentPage || num < 1 || num > totalPages) return;
+      saveCurrentPageAnnotations();
+      currentPage = num;
+      document.querySelectorAll('.thumb-item').forEach(el => el.classList.toggle('active', Number(el.dataset.page) === num));
+      await renderPage(num);
+    }
+
+    function saveCurrentPageAnnotations() {
+      if (!pdfJsDoc) return;
+      const json = fabricCanvas.toJSON();
+      if (json.objects && json.objects.length > 0) pageAnnotations[currentPage] = json;
+      else delete pageAnnotations[currentPage];
+    }
+
+    async function renderPage(num) {
+      const page = await pdfJsDoc.getPage(num);
+      const viewport = page.getViewport({ scale: currentZoom });
+      pdfCanvas.width = viewport.width; pdfCanvas.height = viewport.height;
+      await page.render({ canvasContext: pdfCtx, viewport }).promise;
+
+      fabricCanvas.setDimensions({ width: viewport.width, height: viewport.height });
+      fabricCanvas.setZoom(currentZoom);
+
+      isRestoringHistory = true;
+      fabricCanvas.clear();
+      if (pageAnnotations[num]) {
+        await new Promise(resolve => fabricCanvas.loadFromJSON(pageAnnotations[num], () => { fabricCanvas.renderAll(); resolve(); }));
+      }
+      isRestoringHistory = false;
+      historyStack = [JSON.stringify(fabricCanvas.toJSON())];
+
+      document.getElementById('page-info').textContent = `${originalFileName} • Trang ${currentPage} / ${totalPages}`;
+      document.getElementById('zoom-label').textContent = Math.round(currentZoom * 100) + '%';
+      applyToolMode();
+    }
+
+    async function changeZoom(delta) {
+      if (!pdfJsDoc) return;
+      const next = Math.min(2.6, Math.max(0.6, +(currentZoom + delta).toFixed(2)));
+      if (next === currentZoom) return;
+      saveCurrentPageAnnotations();
+      currentZoom = next;
+      await renderPage(currentPage);
+    }
+
+    document.querySelectorAll('.tool-btn').forEach(btn => btn.addEventListener('click', () => setTool(btn.dataset.tool)));
+    function setTool(tool) {
+      currentTool = tool;
+      document.querySelectorAll('.tool-btn').forEach(b => b.classList.toggle('active', b.dataset.tool === tool));
+      applyToolMode();
+    }
+
+    const getStrokeWidth = () => parseInt(document.getElementById('size-picker').value, 10);
+    const getFontSize = () => ({ 2: 16, 4: 22, 7: 30, 12: 42 }[getStrokeWidth()] || 22);
+    const getColor = () => document.getElementById('color-picker').value;
+    const hexToRgba = (hex, a) => `rgba(${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)},${a})`;
+
+    function applyToolMode() {
+      fabricCanvas.isDrawingMode = (currentTool === 'draw' || currentTool === 'highlight');
+      fabricCanvas.selection = (currentTool === 'select');
+      if (fabricCanvas.isDrawingMode) {
+        const brush = new fabric.PencilBrush(fabricCanvas);
+        brush.color = currentTool === 'highlight' ? hexToRgba(getColor(), 0.35) : getColor();
+        brush.width = currentTool === 'highlight' ? getStrokeWidth() * 4 : getStrokeWidth();
+        fabricCanvas.freeDrawingBrush = brush;
+      }
+      fabricCanvas.forEachObject(obj => { obj.selectable = (currentTool === 'select'); obj.evented = (currentTool === 'select'); });
+    }
+
+    document.getElementById('color-picker').addEventListener('input', () => {
+      applyToolMode();
+      const active = fabricCanvas.getActiveObject();
+      if (active) {
+        if (active.type === 'i-text') active.set('fill', getColor());
+        else if (active.stroke) active.set('stroke', getColor());
+        fabricCanvas.renderAll(); pushHistory();
+      }
+    });
+
+    document.getElementById('size-picker').addEventListener('change', () => {
+      applyToolMode();
+      const active = fabricCanvas.getActiveObject();
+      if (active) {
+        if (active.type === 'i-text') active.set('fontSize', getFontSize());
+        else if (active.strokeWidth) active.set('strokeWidth', getStrokeWidth());
+        fabricCanvas.renderAll(); pushHistory();
+      }
+    });
+
+    fabricCanvas.on('mouse:down', (opt) => {
+      if (!pdfJsDoc || currentTool === 'select' || fabricCanvas.isDrawingMode) return;
+      const pointer = fabricCanvas.getPointer(opt.e);
+      if (currentTool === 'text') {
+        const text = new fabric.IText('Nhập ghi chú...', {
+          left: pointer.x, top: pointer.y, fontFamily: 'Segoe UI, Arial, sans-serif',
+          fontSize: getFontSize(), fill: getColor()
+        });
+        fabricCanvas.add(text); fabricCanvas.setActiveObject(text);
+        text.enterEditing(); text.selectAll(); setTool('select'); pushHistory();
+        return;
+      }
+      isDrawingShape = true; shapeStart = pointer;
+      if (currentTool === 'whiteout') {
+        activeShape = new fabric.Rect({ left: pointer.x, top: pointer.y, width: 1, height: 1, fill: '#ffffff', stroke: '#cbd5e1', strokeWidth: 1, strokeDashArray: [4,4] });
+      } else if (currentTool === 'rect') {
+        activeShape = new fabric.Rect({ left: pointer.x, top: pointer.y, width: 1, height: 1, fill: 'transparent', stroke: getColor(), strokeWidth: getStrokeWidth() });
+      } else if (currentTool === 'circle') {
+        activeShape = new fabric.Ellipse({ left: pointer.x, top: pointer.y, rx: 1, ry: 1, fill: 'transparent', stroke: getColor(), strokeWidth: getStrokeWidth() });
+      } else if (currentTool === 'arrow') {
+        activeShape = new fabric.Line([pointer.x, pointer.y, pointer.x, pointer.y], { stroke: getColor(), strokeWidth: getStrokeWidth(), selectable: false });
+      }
+      if (activeShape) fabricCanvas.add(activeShape);
+    });
+
+    fabricCanvas.on('mouse:move', (opt) => {
+      if (!isDrawingShape || !activeShape) return;
+      const p = fabricCanvas.getPointer(opt.e);
+      if (currentTool === 'whiteout' || currentTool === 'rect') {
+        activeShape.set({ left: Math.min(shapeStart.x, p.x), top: Math.min(shapeStart.y, p.y), width: Math.abs(p.x - shapeStart.x), height: Math.abs(p.y - shapeStart.y) });
+      } else if (currentTool === 'circle') {
+        activeShape.set({ left: Math.min(shapeStart.x, p.x), top: Math.min(shapeStart.y, p.y), rx: Math.abs(p.x - shapeStart.x)/2, ry: Math.abs(p.y - shapeStart.y)/2 });
+      } else if (currentTool === 'arrow') {
+        activeShape.set({ x2: p.x, y2: p.y });
+      }
+      fabricCanvas.renderAll();
+    });
+
+    fabricCanvas.on('mouse:up', (opt) => {
+      if (!isDrawingShape || !activeShape) return;
+      isDrawingShape = false;
+      if (currentTool === 'whiteout') {
+        activeShape.set({ stroke: 'transparent', strokeDashArray: null });
+      } else if (currentTool === 'arrow') {
+        const p = fabricCanvas.getPointer(opt.e);
+        fabricCanvas.remove(activeShape);
+        const dx = p.x - shapeStart.x, dy = p.y - shapeStart.y;
+        if (Math.hypot(dx, dy) > 8) {
+          const angle = Math.atan2(dy, dx) * 180 / Math.PI, sw = getStrokeWidth();
+          const line = new fabric.Line([shapeStart.x, shapeStart.y, p.x, p.y], { stroke: getColor(), strokeWidth: sw });
+          const head = new fabric.Triangle({ left: p.x, top: p.y, originX: 'center', originY: 'center', width: sw*4+6, height: sw*4+8, fill: getColor(), angle: angle + 90 });
+          fabricCanvas.add(new fabric.Group([line, head]));
+        }
+      }
+      activeShape = null; fabricCanvas.renderAll(); pushHistory();
+    });
+
+    document.getElementById('img-input').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file || !pdfJsDoc) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        fabric.Image.fromURL(ev.target.result, (img) => {
+          const maxW = (baseSizes[currentPage]?.width || 500) * 0.35;
+          if (img.width > maxW) img.scaleToWidth(maxW);
+          img.set({ left: 60, top: 60 });
+          fabricCanvas.add(img); fabricCanvas.setActiveObject(img); setTool('select'); pushHistory();
+        });
+      };
+      reader.readAsDataURL(file); e.target.value = '';
+    });
+
+    function pushHistory() {
+      if (isRestoringHistory) return;
+      historyStack.push(JSON.stringify(fabricCanvas.toJSON()));
+      if (historyStack.length > 30) historyStack.shift();
+    }
+    fabricCanvas.on('path:created', pushHistory);
+    fabricCanvas.on('object:modified', pushHistory);
+
+    function undo() {
+      if (historyStack.length <= 1) return;
+      historyStack.pop();
+      isRestoringHistory = true;
+      fabricCanvas.loadFromJSON(historyStack[historyStack.length - 1], () => { fabricCanvas.renderAll(); isRestoringHistory = false; applyToolMode(); });
+    }
+
+    function deleteSelectedObj() {
+      const active = fabricCanvas.getActiveObjects();
+      if (!active.length) return;
+      active.forEach(obj => fabricCanvas.remove(obj));
+      fabricCanvas.discardActiveObject(); fabricCanvas.renderAll(); pushHistory();
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (!document.getElementById('view-editor').classList.contains('active')) return;
+      const active = fabricCanvas.getActiveObject();
+      if (active && active.isEditing) return;
+      if (e.key === 'Delete' || e.key === 'Backspace') deleteSelectedObj();
+      else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
+    });
+
+    async function exportEditedPDF() {
+      if (!originalPdfBytes) return;
+      saveCurrentPageAnnotations();
+      setEditorStatus('Đang xuất file PDF...');
+      try {
+        const pdfDoc = await PDFDocument.load(originalPdfBytes, { ignoreEncryption: true });
+        const pages = pdfDoc.getPages();
+        for (const [pageStr, json] of Object.entries(pageAnnotations)) {
+          const pageNum = Number(pageStr), size = baseSizes[pageNum];
+          if (!size || !json.objects || !json.objects.length) continue;
+          const staticCanvas = new fabric.StaticCanvas(document.createElement('canvas'), { width: size.width, height: size.height });
+          await new Promise(resolve => staticCanvas.loadFromJSON(json, () => { staticCanvas.renderAll(); resolve(); }));
+          const pngImage = await pdfDoc.embedPng(staticCanvas.toDataURL({ format: 'png', multiplier: 2.5 }));
+          const pdfPage = pages[pageNum - 1], { width, height } = pdfPage.getSize();
+          pdfPage.drawImage(pngImage, { x: 0, y: 0, width, height });
+          staticCanvas.dispose();
+        }
+        const outBytes = await pdfDoc.save();
+        downloadBlob(new Blob([outBytes], { type: 'application/pdf' }), originalFileName.replace(/\.pdf$/i, '') + '_DaSua.pdf');
+        setEditorStatus('Đã xuất file PDF thành công!');
+        setTimeout(() => setEditorStatus(''), 3000);
+      } catch (err) {
+        alert('Lỗi khi xuất PDF: ' + err.message); setEditorStatus('');
+      }
+    }
+
+    // PHẦN 2: GỘP & TÁCH PDF TRỰC QUAN
+    const sourceFiles = new Map();
+    let orgPages = [], orgFileCounter = 0, orgPageCounter = 0;
+    const grid = document.getElementById('page-grid');
+    const setOrgStatus = (msg) => document.getElementById('org-status').textContent = msg;
+
+    new Sortable(grid, {
+      animation: 180, ghostClass: 'sortable-ghost',
+      onEnd: () => {
+        const newIds = Array.from(grid.children).map(el => el.dataset.id);
+        const map = new Map(orgPages.map(p => [p.id, p]));
+        orgPages = newIds.map(id => map.get(id)).filter(Boolean);
+        orgUpdateBadges();
+      }
+    });
+
+    const orgDrop = document.getElementById('org-dropzone');
+    const orgInput = document.getElementById('org-input');
+    ['dragenter', 'dragover'].forEach(ev => orgDrop.addEventListener(ev, e => { e.preventDefault(); orgDrop.classList.add('dragover'); }));
+    ['dragleave', 'drop'].forEach(ev => orgDrop.addEventListener(ev, e => { e.preventDefault(); orgDrop.classList.remove('dragover'); }));
+    orgDrop.addEventListener('drop', e => handleOrgFiles(e.dataTransfer.files));
+    orgInput.addEventListener('change', e => { handleOrgFiles(e.target.files); orgInput.value = ''; });
+
+    async function handleOrgFiles(fileList) {
+      const files = Array.from(fileList).filter(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+      if (!files.length) return;
+      for (const file of files) {
+        setOrgStatus(`Đang đọc: ${file.name}...`);
+        try {
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          const fileId = 'f_' + (++orgFileCounter);
+          sourceFiles.set(fileId, { name: file.name, bytes });
+          const doc = await pdfjsLib.getDocument({ data: bytes.slice() }).promise;
+          for (let i = 1; i <= doc.numPages; i++) {
+            const page = await doc.getPage(i);
+            const vp = page.getViewport({ scale: 0.45 });
+            const c = document.createElement('canvas');
+            c.width = vp.width; c.height = vp.height;
+            await page.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+            const item = { id: 'p_' + (++orgPageCounter), fileId, fileName: file.name, pageIndex: i - 1, thumbUrl: c.toDataURL('image/jpeg', 0.8), rotation: 0, selected: false };
+            orgPages.push(item);
+            grid.appendChild(createOrgCard(item, orgPages.length));
+          }
+        } catch (err) { alert(`Không đọc được "${file.name}": ${err.message}`); }
+      }
+      setOrgStatus(''); orgUpdateUI();
+    }
+
+    function createOrgCard(item, orderNum) {
+      const card = document.createElement('div');
+      card.className = 'page-card'; card.dataset.id = item.id;
+      card.innerHTML = `
+        <div class="card-top"><span class="order-badge">#${orderNum}</span><input type="checkbox" class="card-check" /></div>
+        <div class="thumb-wrap"><img src="${item.thumbUrl}" /></div>
+        <div class="card-info" title="${item.fileName} - Trang ${item.pageIndex+1}">${item.fileName} (Tr.${item.pageIndex+1})</div>
+        <div class="card-actions">
+          <button class="icon-btn">↻ Xoay</button>
+          <button class="icon-btn btn-danger">✕ Xóa</button>
+        </div>
+      `;
+      const cb = card.querySelector('.card-check'), img = card.querySelector('img');
+      const [btnRot, btnDel] = card.querySelectorAll('.icon-btn');
+      cb.addEventListener('change', () => { item.selected = cb.checked; card.classList.toggle('selected', item.selected); orgUpdateUI(); });
+      card.querySelector('.thumb-wrap').addEventListener('click', () => { cb.checked = !cb.checked; cb.dispatchEvent(new Event('change')); });
+      btnRot.addEventListener('click', e => { e.stopPropagation(); item.rotation = (item.rotation + 90) % 360; img.style.transform = `rotate(${item.rotation}deg)`; });
+      btnDel.addEventListener('click', e => { e.stopPropagation(); orgPages = orgPages.filter(p => p.id !== item.id); card.remove(); orgUpdateBadges(); orgUpdateUI(); });
+      return card;
+    }
+
+    function orgUpdateBadges() { Array.from(grid.children).forEach((c, i) => c.querySelector('.order-badge').textContent = '#' + (i + 1)); }
+    function orgUpdateUI() {
+      const total = orgPages.length, sel = orgPages.filter(p => p.selected).length;
+      document.getElementById('org-summary-text').textContent = total ? `Tổng cộng: ${total} trang • Đang chọn: ${sel} trang` : 'Chưa có trang nào.';
+      ['btn-sel-all','btn-clear','btn-export-all','btn-export-zip'].forEach(id => document.getElementById(id).disabled = total === 0);
+      ['btn-desel','btn-del-sel','btn-export-sel'].forEach(id => document.getElementById(id).disabled = sel === 0);
+    }
+
+    function orgSelectAll(state) {
+      orgPages.forEach(p => p.selected = state);
+      Array.from(grid.children).forEach(c => { c.classList.toggle('selected', state); c.querySelector('.card-check').checked = state; });
+      orgUpdateUI();
+    }
+    function orgDeleteSelected() {
+      const ids = new Set(orgPages.filter(p => p.selected).map(p => p.id));
+      orgPages = orgPages.filter(p => !ids.has(p.id));
+      Array.from(grid.children).forEach(c => { if (ids.has(c.dataset.id)) c.remove(); });
+      orgUpdateBadges(); orgUpdateUI();
+    }
+    function orgClearAll() { orgPages = []; sourceFiles.clear(); grid.innerHTML = ''; orgUpdateUI(); setOrgStatus(''); }
+
+    async function orgExportPDF(onlySelected) {
+      const targets = onlySelected ? orgPages.filter(p => p.selected) : orgPages;
+      if (!targets.length) return;
+      setOrgStatus('Đang tạo file PDF...');
+      try {
+        const outPdf = await PDFDocument.create(), loaded = new Map();
+        for (const item of targets) {
+          if (!loaded.has(item.fileId)) loaded.set(item.fileId, await PDFDocument.load(sourceFiles.get(item.fileId).bytes, { ignoreEncryption: true }));
+          const [cp] = await outPdf.copyPages(loaded.get(item.fileId), [item.pageIndex]);
+          if (item.rotation) cp.setRotation(degrees((cp.getRotation().angle + item.rotation) % 360));
+          outPdf.addPage(cp);
+        }
+        let name = document.getElementById('out-name').value.trim() || 'PDF_Ket_Qua';
+        if (onlySelected) name += '_DaTach';
+        if (!name.toLowerCase().endsWith('.pdf')) name += '.pdf';
+        downloadBlob(new Blob([await outPdf.save()], { type: 'application/pdf' }), name);
+        setOrgStatus(`Đã xuất thành công ${targets.length} trang!`);
+      } catch (err) { alert('Lỗi xuất PDF: ' + err.message); setOrgStatus(''); }
+    }
+
+    async function orgExportZip() {
+      const sel = orgPages.filter(p => p.selected), targets = sel.length ? sel : orgPages;
+      if (!targets.length) return;
+      setOrgStatus(`Đang tách lẻ ${targets.length} trang...`);
+      try {
+        const zip = new JSZip(), loaded = new Map();
+        const prefix = (document.getElementById('out-name').value.trim() || 'PDF_Tach').replace(/\.pdf$/i, '');
+        for (let i = 0; i < targets.length; i++) {
+          const item = targets[i];
+          if (!loaded.has(item.fileId)) loaded.set(item.fileId, await PDFDocument.load(sourceFiles.get(item.fileId).bytes, { ignoreEncryption: true }));
+          const single = await PDFDocument.create();
+          const [cp] = await single.copyPages(loaded.get(item.fileId), [item.pageIndex]);
+          if (item.rotation) cp.setRotation(degrees((cp.getRotation().angle + item.rotation) % 360));
+          single.addPage(cp);
+          zip.file(`${prefix}_trang_${String(i+1).padStart(3,'0')}.pdf`, await single.save());
+        }
+        downloadBlob(await zip.generateAsync({ type: 'blob' }), `${prefix}_TachLe.zip`);
+        setOrgStatus(`Đã tách lẻ ${targets.length} trang vào file ZIP!`);
+      } catch (err) { alert('Lỗi tách ZIP: ' + err.message); setOrgStatus(''); }
+    }
+
+    // PHẦN 3: PWA & TỰ ĐỘNG MỞ FILE KHI BẤM ĐÚP TỪ WINDOWS
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js');
+    }
+
+    if ('launchQueue' in window) {
+      window.launchQueue.setConsumer(async (launchParams) => {
+        if (!launchParams.files || !launchParams.files.length) return;
+        if (launchParams.files.length === 1) {
+          switchMainTab('editor');
+          const file = await launchParams.files[0].getFile();
+          loadPDF(file);
+        } else {
+          switchMainTab('organizer');
+          const files = await Promise.all(launchParams.files.map(h => h.getFile()));
+          handleOrgFiles(files);
+        }
+      });
+    }
+  </script>
+</body>
+</html>

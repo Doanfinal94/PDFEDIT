@@ -1,0 +1,24 @@
+{
+  "name": "PDF All-in-One",
+  "short_name": "PDF Tool",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#e2e8f0",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "file_handlers": [
+    {
+      "action": "./",
+      "accept": {
+        "application/pdf": [".pdf"]
+      }
+    }
+  ]
+}
