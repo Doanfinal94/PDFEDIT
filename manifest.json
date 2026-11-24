@@ -1,11 +1,23 @@
 {
-  "name": "PDF All-in-One",
-  "short_name": "PDF Tool",
+  "name": "PDF Edit (copyright © by Đoàn Nguyễn)",
+  "short_name": "PDF Edit",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#e2e8f0",
   "theme_color": "#2563eb",
   "icons": [
+    {
+      "src": "logo-64.png",
+      "sizes": "64x64",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "logo-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
     {
       "src": "logo.png",
       "sizes": "512x512",
@@ -18,7 +30,25 @@
       "action": "./",
       "accept": {
         "application/pdf": [".pdf"]
-      }
+      },
+      "icons": [
+        {
+          "src": "logo-64.png",
+          "sizes": "64x64",
+          "type": "image/png"
+        },
+        {
+          "src": "logo-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        },
+        {
+          "src": "logo.png",
+          "sizes": "512x512",
+          "type": "image/png"
+        }
+      ],
+      "launch_type": "single-client"
     }
   ]
 }

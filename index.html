@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PDF All-in-One: Xem, Sửa, Gộp & Tách</title>
-  <link rel="icon" type="image/png" href="logo.png" />
+  <title>PDF Edit (copyright © by Đoàn Nguyễn)</title>
+  <link rel="icon" type="image/png" href="logo-64.png" />
   <link rel="manifest" href="manifest.json" />
 
   <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
@@ -34,7 +34,8 @@
       display: flex; align-items: center; justify-content: space-between;
       height: 46px; flex-shrink: 0;
     }
-    .app-brand { font-weight: 700; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+    .app-brand { font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+    .app-brand img { width: 26px; height: 26px; border-radius: 6px; object-fit: cover; }
     .nav-tabs { display: flex; gap: 6px; height: 100%; align-items: flex-end; }
     .nav-tab {
       background: transparent; color: #94a3b8; border: none; border-radius: 8px 8px 0 0;
@@ -164,7 +165,10 @@
 <body>
 
   <div class="app-nav">
-    <div class="app-brand">📄 PDF All-in-One</div>
+    <div class="app-brand">
+      <img src="logo-64.png" alt="Logo" />
+      <span>PDF Edit (copyright © by Đoàn Nguyễn)</span>
+    </div>
     <div class="nav-tabs">
       <button class="nav-tab active" id="tab-btn-editor" onclick="switchMainTab('editor')">✏️ Xem & Sửa PDF</button>
       <button class="nav-tab" id="tab-btn-organizer" onclick="switchMainTab('organizer')">📑 Gộp & Tách PDF</button>
@@ -228,7 +232,7 @@
     </div>
   </div>
 
-  <!-- Host chứa lớp vẽ Fabric.js (di chuyển linh hoạt sang trang đang chọn) -->
+  <!-- Host chứa lớp vẽ Fabric.js -->
   <div id="anno-host" style="display:none;"><canvas id="anno-canvas"></canvas></div>
 
   <!-- TAB 2: GỘP & TÁCH PDF -->
@@ -284,9 +288,7 @@
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
-    // =========================================================================
     // CHẶN ZOOM TRÌNH DUYỆT -> CHUYỂN THÀNH ZOOM RIÊNG CỦA PDF
-    // =========================================================================
     window.addEventListener('wheel', (e) => {
       if (e.ctrlKey) {
         e.preventDefault();
@@ -307,9 +309,7 @@
       }
     });
 
-    // =========================================================================
     // PHẦN 1: XEM & SỬA PDF (CUỘN LIÊN TỤC)
-    // =========================================================================
     let originalPdfBytes = null, originalFileName = 'TaiLieu.pdf', pdfJsDoc = null;
     let currentPage = 1, totalPages = 0, currentZoom = 1.0;
     let baseSizes = {}, pageAnnotations = {}, pagePreviewUrls = {};
@@ -367,7 +367,6 @@
     async function buildSidebarAndSlots() {
       const sidebar = document.getElementById('sidebar');
       sidebar.innerHTML = '';
-      // Giữ lại annoHost trước khi xóa pagesContainer
       document.body.appendChild(annoHost);
       annoHost.style.display = 'none';
       pagesContainer.innerHTML = '';
@@ -377,7 +376,6 @@
         const baseVp = page.getViewport({ scale: 1.0 });
         baseSizes[i] = { width: baseVp.width, height: baseVp.height };
 
-        // Thumbnail bên trái
         const thumbVp = page.getViewport({ scale: 0.22 });
         const c = document.createElement('canvas');
         c.width = thumbVp.width; c.height = thumbVp.height;
@@ -390,7 +388,6 @@
         div.onclick = () => activatePage(i, true);
         sidebar.appendChild(div);
 
-        // Khung trang xếp dọc trong viewer
         const slot = document.createElement('div');
         slot.className = 'page-slot';
         slot.dataset.page = i;
@@ -408,7 +405,7 @@
 
       const slots = pagesContainer.querySelectorAll('.page-slot');
       for (let i = 1; i <= totalPages; i++) {
-        if (myToken !== renderToken) return; // Hủy nếu người dùng tiếp tục zoom
+        if (myToken !== renderToken) return;
         const slot = slots[i - 1];
         const canvas = slot.querySelector('.pdf-page-canvas');
         const page = await pdfJsDoc.getPage(i);
@@ -422,7 +419,6 @@
         await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
       }
 
-      // Cập nhật lại kích thước lớp vẽ trên trang đang chọn
       if (myToken === renderToken) {
         const size = baseSizes[currentPage];
         if (size) {
@@ -474,7 +470,6 @@
         targetSlot.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
 
-      // Ẩn ảnh preview tĩnh của trang đang chọn và gắn lớp Fabric.js trực tiếp lên
       const previewImg = targetSlot.querySelector('.anno-preview');
       if (previewImg) previewImg.style.display = 'none';
 
@@ -497,7 +492,6 @@
       applyToolMode();
     }
 
-    // Tự động cập nhật số trang trên thanh trạng thái & sidebar khi cuộn chuột
     let scrollTimer = null;
     viewerEl.addEventListener('scroll', () => {
       if (!pdfJsDoc) return;
@@ -535,7 +529,6 @@
 
     function changeZoom(delta) { setZoom(currentZoom + delta); }
 
-    // ===== CÔNG CỤ VẼ & GHI CHÚ =====
     document.querySelectorAll('.tool-btn').forEach(btn => btn.addEventListener('click', () => setTool(btn.dataset.tool)));
     function setTool(tool) {
       currentTool = tool;
@@ -708,9 +701,7 @@
       }
     }
 
-    // =========================================================================
     // PHẦN 2: GỘP & TÁCH PDF TRỰC QUAN
-    // =========================================================================
     const sourceFiles = new Map();
     let orgPages = [], orgFileCounter = 0, orgPageCounter = 0;
     const grid = document.getElementById('page-grid');
