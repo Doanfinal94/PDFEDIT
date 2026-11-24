@@ -161,6 +161,50 @@
     .card-actions { display: flex; gap: 6px; }
     .icon-btn { flex: 1; padding: 5px; font-size: 12px; justify-content: center; }
 
+
+    /* Khung quét chuột chọn nhóm (Marquee) */
+    #marquee-box {
+      position: fixed;
+      border: 1.5px solid #2563eb;
+      background: rgba(37, 99, 235, 0.16);
+      pointer-events: none;
+      z-index: 9999;
+      display: none;
+      border-radius: 3px;
+    }
+    /* Hiệu ứng tô mờ các thẻ trong nhóm đang kéo */
+    .page-card.group-dragging {
+      opacity: 0.35;
+      transform: scale(0.96);
+      border-style: dashed;
+    }
+    /* Hình động (tô mờ) đi theo trỏ chuột khi kéo nhóm */
+    #drag-group-ghost {
+      position: fixed;
+      pointer-events: none;
+      z-index: 10000;
+      display: none;
+      background: rgba(37, 99, 235, 0.9);
+      color: #fff;
+      padding: 8px 14px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 700;
+      box-shadow: 0 10px 25px rgba(37, 99, 235, 0.35);
+      align-items: center;
+      gap: 10px;
+      opacity: 0.92;
+      transform: translate(14px, 14px);
+    }
+    #drag-group-ghost img {
+      width: 34px;
+      height: 42px;
+      object-fit: cover;
+      border-radius: 4px;
+      border: 1.5px solid rgba(255,255,255,0.8);
+      background: #fff;
+    }
+
     /* Ẩn toàn bộ giao diện nếu người dùng bấm In từ menu 3 chấm của trình duyệt */
     @media print {
       body { height: auto; overflow: visible; background: #fff; }
@@ -267,7 +311,7 @@
       <div class="org-container">
         <div class="dropzone" id="org-dropzone" onclick="document.getElementById('org-input').click()">
           <strong>Kéo thả nhiều file PDF vào đây (hoặc bấm để chọn)</strong>
-          <p>Tick chọn nhiều trang (hoặc giữ Shift + Click chọn cả dải) rồi kéo 1 trang bất kỳ để di chuyển cả nhóm • Xoay, xóa, gộp hoặc tách lẻ</p>
+          <p>Quét chuột vùng trống để chọn nhiều trang • Bấm chọn như Windows (Click / Ctrl+Click / Shift+Click) • Kéo 1 trang trong nhóm để di chuyển cả nhóm</p>
           <input type="file" id="org-input" accept="application/pdf" multiple hidden />
         </div>
         <div class="org-summary">
@@ -278,6 +322,9 @@
       </div>
     </div>
   </div>
+
+  <div id="marquee-box"></div>
+  <div id="drag-group-ghost"><img id="drag-ghost-img" src="" /><span id="drag-ghost-text"></span></div>
 
   <script>
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -759,29 +806,73 @@
     const setOrgStatus = (msg) => document.getElementById('org-status').textContent = msg;
 
     let lastClickedOrgId = null;
+    const marqueeBox = document.getElementById('marquee-box');
+    const dragGhost = document.getElementById('drag-group-ghost');
+    const dragGhostImg = document.getElementById('drag-ghost-img');
+    const dragGhostText = document.getElementById('drag-ghost-text');
+    let isGroupDragging = false;
+
+    function syncCardSelectionUI() {
+      const byId = new Map(orgPages.map(p => [p.id, p]));
+      Array.from(grid.children).forEach(card => {
+        const item = byId.get(card.dataset.id);
+        if (!item) return;
+        card.classList.toggle('selected', item.selected);
+        card.querySelector('.card-check').checked = item.selected;
+      });
+      orgUpdateUI();
+    }
+
+    function updateGhostPosition(e) {
+      if (!isGroupDragging) return;
+      const clientX = e.clientX ?? (e.touches && e.touches[0]?.clientX) ?? 0;
+      const clientY = e.clientY ?? (e.touches && e.touches[0]?.clientY) ?? 0;
+      dragGhost.style.left = clientX + 'px';
+      dragGhost.style.top = clientY + 'px';
+    }
+    document.addEventListener('dragover', updateGhostPosition);
+    document.addEventListener('mousemove', updateGhostPosition);
+    document.addEventListener('pointermove', updateGhostPosition);
 
     new Sortable(grid, {
-      animation: 180, ghostClass: 'sortable-ghost',
+      animation: 180,
+      ghostClass: 'sortable-ghost',
+      forceFallback: true,
+      fallbackTolerance: 4,
       onStart: (evt) => {
         const dragged = orgPages.find(p => p.id === evt.item.dataset.id);
-        const selCount = orgPages.filter(p => p.selected).length;
-        if (dragged && dragged.selected && selCount > 1) {
-          setOrgStatus(`Đang kéo nhóm ${selCount} trang đã chọn...`);
+        const selectedItems = orgPages.filter(p => p.selected);
+        if (dragged && dragged.selected && selectedItems.length > 1) {
+          isGroupDragging = true;
+          setOrgStatus(`Đang kéo nhóm ${selectedItems.length} trang đã chọn...`);
+          // Tô mờ tất cả các thẻ khác trong nhóm
+          Array.from(grid.children).forEach(card => {
+            if (card !== evt.item && card.classList.contains('selected')) {
+              card.classList.add('group-dragging');
+            }
+          });
+          // Hiện hình động tô mờ đi theo trỏ chuột
+          dragGhostImg.src = dragged.thumbUrl;
+          dragGhostText.textContent = `Đang di chuyển ${selectedItems.length} trang`;
+          dragGhost.style.display = 'flex';
+          if (evt.originalEvent) updateGhostPosition(evt.originalEvent);
         }
       },
       onEnd: (evt) => {
+        isGroupDragging = false;
+        dragGhost.style.display = 'none';
+        Array.from(grid.children).forEach(c => c.classList.remove('group-dragging'));
+
         const draggedId = evt.item.dataset.id;
         const draggedObj = orgPages.find(p => p.id === draggedId);
         const selectedIds = orgPages.filter(p => p.selected).map(p => p.id);
 
         if (draggedObj && draggedObj.selected && selectedIds.length > 1) {
-          // Gom toàn bộ các trang đã chọn về đúng vị trí vừa thả, giữ nguyên thứ tự gốc của nhóm
           const selectedSet = new Set(selectedIds);
           const cardMap = new Map(Array.from(grid.children).map(el => [el.dataset.id, el]));
           const currentDomIds = Array.from(grid.children).map(el => el.dataset.id);
           const dropIdx = currentDomIds.indexOf(draggedId);
 
-          // Danh sách các trang không được chọn theo thứ tự hiện tại
           const unselectedBefore = currentDomIds.slice(0, dropIdx).filter(id => !selectedSet.has(id));
           const unselectedAfter = currentDomIds.slice(dropIdx + 1).filter(id => !selectedSet.has(id));
           const finalOrderIds = [...unselectedBefore, ...selectedIds, ...unselectedAfter];
@@ -801,6 +892,67 @@
         orgPages = newIds.map(id => map.get(id)).filter(Boolean);
         orgUpdateBadges();
       }
+    });
+
+    // QUÉT CHUỘT CHỌN NHÓM (MARQUEE SELECTION) TRONG VÙNG TRỐNG
+    const orgMain = document.querySelector('.org-main');
+    let isMarquee = false, mqStartX = 0, mqStartY = 0, mqInitialSelected = new Set();
+
+    orgMain.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      // Chỉ bắt đầu quét khi bấm vào vùng trống (không trúng thẻ trang, nút bấm, dropzone)
+      if (e.target.closest('.page-card') || e.target.closest('.dropzone') || e.target.closest('button') || e.target.closest('input')) {
+        return;
+      }
+      isMarquee = true;
+      mqStartX = e.clientX;
+      mqStartY = e.clientY;
+      mqInitialSelected = (e.ctrlKey || e.metaKey || e.shiftKey)
+        ? new Set(orgPages.filter(p => p.selected).map(p => p.id))
+        : new Set();
+
+      if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
+        orgPages.forEach(p => p.selected = false);
+        syncCardSelectionUI();
+      }
+
+      marqueeBox.style.left = mqStartX + 'px';
+      marqueeBox.style.top = mqStartY + 'px';
+      marqueeBox.style.width = '0px';
+      marqueeBox.style.height = '0px';
+      marqueeBox.style.display = 'block';
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isMarquee) return;
+      const left = Math.min(mqStartX, e.clientX);
+      const top = Math.min(mqStartY, e.clientY);
+      const width = Math.abs(e.clientX - mqStartX);
+      const height = Math.abs(e.clientY - mqStartY);
+
+      marqueeBox.style.left = left + 'px';
+      marqueeBox.style.top = top + 'px';
+      marqueeBox.style.width = width + 'px';
+      marqueeBox.style.height = height + 'px';
+
+      const rect = { left, top, right: left + width, bottom: top + height };
+      const byId = new Map(orgPages.map(p => [p.id, p]));
+
+      Array.from(grid.children).forEach(card => {
+        const cr = card.getBoundingClientRect();
+        const intersects = !(cr.right < rect.left || cr.left > rect.right || cr.bottom < rect.top || cr.top > rect.bottom);
+        const item = byId.get(card.dataset.id);
+        if (item) {
+          item.selected = intersects || mqInitialSelected.has(item.id);
+        }
+      });
+      syncCardSelectionUI();
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (!isMarquee) return;
+      isMarquee = false;
+      marqueeBox.style.display = 'none';
     });
 
     const orgDrop = document.getElementById('org-dropzone');
@@ -849,34 +1001,34 @@
       `;
       const cb = card.querySelector('.card-check'), img = card.querySelector('img');
       const [btnRot, btnDel] = card.querySelectorAll('.icon-btn');
-      const toggleSelect = (e) => {
-        if (e && e.shiftKey && lastClickedOrgId) {
+      const handleCardSelect = (e, fromCheckbox) => {
+        if (e.shiftKey && lastClickedOrgId) {
           const idx1 = orgPages.findIndex(p => p.id === lastClickedOrgId);
           const idx2 = orgPages.findIndex(p => p.id === item.id);
           if (idx1 !== -1 && idx2 !== -1) {
             const [start, end] = idx1 < idx2 ? [idx1, idx2] : [idx2, idx1];
-            const targetState = true;
-            for (let i = start; i <= end; i++) {
-              orgPages[i].selected = targetState;
-              const c = grid.children[i];
-              if (c) {
-                c.classList.toggle('selected', targetState);
-                c.querySelector('.card-check').checked = targetState;
-              }
-            }
-            orgUpdateUI();
+            if (!e.ctrlKey && !e.metaKey) orgPages.forEach(p => p.selected = false);
+            for (let i = start; i <= end; i++) orgPages[i].selected = true;
+            syncCardSelectionUI();
             return;
           }
         }
-        item.selected = cb.checked;
-        card.classList.toggle('selected', item.selected);
+
+        if (fromCheckbox || e.ctrlKey || e.metaKey) {
+          // Bấm vào ô vuông tick hoặc giữ Ctrl -> thêm/bớt mà giữ nguyên các file cũ
+          item.selected = fromCheckbox ? cb.checked : !item.selected;
+        } else {
+          // Bấm bình thường vào thẻ -> bỏ chọn các file cũ, chỉ chọn file này
+          orgPages.forEach(p => p.selected = (p.id === item.id));
+        }
         lastClickedOrgId = item.id;
-        orgUpdateUI();
+        syncCardSelectionUI();
       };
-      cb.addEventListener('click', (e) => { e.stopPropagation(); toggleSelect(e); });
-      card.querySelector('.thumb-wrap').addEventListener('click', (e) => {
-        if (!e.shiftKey) cb.checked = !cb.checked;
-        toggleSelect(e);
+
+      cb.addEventListener('click', (e) => { e.stopPropagation(); handleCardSelect(e, true); });
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('button') || e.target === cb) return;
+        handleCardSelect(e, false);
       });
       btnRot.addEventListener('click', e => { e.stopPropagation(); item.rotation = (item.rotation + 90) % 360; img.style.transform = `rotate(${item.rotation}deg)`; });
       btnDel.addEventListener('click', e => { e.stopPropagation(); orgPages = orgPages.filter(p => p.id !== item.id); card.remove(); orgUpdateBadges(); orgUpdateUI(); });
