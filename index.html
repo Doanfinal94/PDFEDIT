@@ -267,7 +267,7 @@
       <div class="org-container">
         <div class="dropzone" id="org-dropzone" onclick="document.getElementById('org-input').click()">
           <strong>Kéo thả nhiều file PDF vào đây (hoặc bấm để chọn)</strong>
-          <p>Kéo thả trực tiếp các ô trang bên dưới để sắp xếp thứ tự • Xoay, xóa, gộp hoặc tách lẻ</p>
+          <p>Tick chọn nhiều trang (hoặc giữ Shift + Click chọn cả dải) rồi kéo 1 trang bất kỳ để di chuyển cả nhóm • Xoay, xóa, gộp hoặc tách lẻ</p>
           <input type="file" id="org-input" accept="application/pdf" multiple hidden />
         </div>
         <div class="org-summary">
@@ -758,9 +758,44 @@
     const grid = document.getElementById('page-grid');
     const setOrgStatus = (msg) => document.getElementById('org-status').textContent = msg;
 
+    let lastClickedOrgId = null;
+
     new Sortable(grid, {
       animation: 180, ghostClass: 'sortable-ghost',
-      onEnd: () => {
+      onStart: (evt) => {
+        const dragged = orgPages.find(p => p.id === evt.item.dataset.id);
+        const selCount = orgPages.filter(p => p.selected).length;
+        if (dragged && dragged.selected && selCount > 1) {
+          setOrgStatus(`Đang kéo nhóm ${selCount} trang đã chọn...`);
+        }
+      },
+      onEnd: (evt) => {
+        const draggedId = evt.item.dataset.id;
+        const draggedObj = orgPages.find(p => p.id === draggedId);
+        const selectedIds = orgPages.filter(p => p.selected).map(p => p.id);
+
+        if (draggedObj && draggedObj.selected && selectedIds.length > 1) {
+          // Gom toàn bộ các trang đã chọn về đúng vị trí vừa thả, giữ nguyên thứ tự gốc của nhóm
+          const selectedSet = new Set(selectedIds);
+          const cardMap = new Map(Array.from(grid.children).map(el => [el.dataset.id, el]));
+          const currentDomIds = Array.from(grid.children).map(el => el.dataset.id);
+          const dropIdx = currentDomIds.indexOf(draggedId);
+
+          // Danh sách các trang không được chọn theo thứ tự hiện tại
+          const unselectedBefore = currentDomIds.slice(0, dropIdx).filter(id => !selectedSet.has(id));
+          const unselectedAfter = currentDomIds.slice(dropIdx + 1).filter(id => !selectedSet.has(id));
+          const finalOrderIds = [...unselectedBefore, ...selectedIds, ...unselectedAfter];
+
+          finalOrderIds.forEach(id => {
+            const el = cardMap.get(id);
+            if (el) grid.appendChild(el);
+          });
+          setOrgStatus(`Đã di chuyển nhóm ${selectedIds.length} trang!`);
+          setTimeout(() => setOrgStatus(''), 2000);
+        } else {
+          setOrgStatus('');
+        }
+
         const newIds = Array.from(grid.children).map(el => el.dataset.id);
         const map = new Map(orgPages.map(p => [p.id, p]));
         orgPages = newIds.map(id => map.get(id)).filter(Boolean);
@@ -814,8 +849,35 @@
       `;
       const cb = card.querySelector('.card-check'), img = card.querySelector('img');
       const [btnRot, btnDel] = card.querySelectorAll('.icon-btn');
-      cb.addEventListener('change', () => { item.selected = cb.checked; card.classList.toggle('selected', item.selected); orgUpdateUI(); });
-      card.querySelector('.thumb-wrap').addEventListener('click', () => { cb.checked = !cb.checked; cb.dispatchEvent(new Event('change')); });
+      const toggleSelect = (e) => {
+        if (e && e.shiftKey && lastClickedOrgId) {
+          const idx1 = orgPages.findIndex(p => p.id === lastClickedOrgId);
+          const idx2 = orgPages.findIndex(p => p.id === item.id);
+          if (idx1 !== -1 && idx2 !== -1) {
+            const [start, end] = idx1 < idx2 ? [idx1, idx2] : [idx2, idx1];
+            const targetState = true;
+            for (let i = start; i <= end; i++) {
+              orgPages[i].selected = targetState;
+              const c = grid.children[i];
+              if (c) {
+                c.classList.toggle('selected', targetState);
+                c.querySelector('.card-check').checked = targetState;
+              }
+            }
+            orgUpdateUI();
+            return;
+          }
+        }
+        item.selected = cb.checked;
+        card.classList.toggle('selected', item.selected);
+        lastClickedOrgId = item.id;
+        orgUpdateUI();
+      };
+      cb.addEventListener('click', (e) => { e.stopPropagation(); toggleSelect(e); });
+      card.querySelector('.thumb-wrap').addEventListener('click', (e) => {
+        if (!e.shiftKey) cb.checked = !cb.checked;
+        toggleSelect(e);
+      });
       btnRot.addEventListener('click', e => { e.stopPropagation(); item.rotation = (item.rotation + 90) % 360; img.style.transform = `rotate(${item.rotation}deg)`; });
       btnDel.addEventListener('click', e => { e.stopPropagation(); orgPages = orgPages.filter(p => p.id !== item.id); card.remove(); orgUpdateBadges(); orgUpdateUI(); });
       return card;
