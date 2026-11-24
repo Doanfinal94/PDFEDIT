@@ -19,7 +19,7 @@
       --primary-hover: #1d4ed8;
       --success: #16a34a;
       --danger: #dc2626;
-      --bg: #e2e8f0;
+      --bg: #cbd5e1;
       --panel: #ffffff;
       --border: #cbd5e1;
       --text: #1e293b;
@@ -28,6 +28,7 @@
     * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, sans-serif; }
     body { margin: 0; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 
+    /* Thanh chuyển Tab chính */
     .app-nav {
       background: #0f172a; color: #fff; padding: 0 16px;
       display: flex; align-items: center; justify-content: space-between;
@@ -64,7 +65,7 @@
       background: var(--panel); border-bottom: 1px solid var(--border);
       padding: 8px 14px; display: flex; flex-wrap: wrap; gap: 8px;
       align-items: center; justify-content: space-between; z-index: 20;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.05); flex-shrink: 0;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06); flex-shrink: 0;
     }
     .group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
     .divider { width: 1px; height: 24px; background: var(--border); margin: 0 4px; }
@@ -72,10 +73,11 @@
     input[type="color"] { width: 30px; height: 30px; border: 1px solid var(--border); border-radius: 6px; padding: 2px; cursor: pointer; background: #fff; }
     select, input[type="text"] { padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: #fff; }
 
+    /* ===== VIEW 1: XEM & SỬA PDF (CUỘN LIÊN TỤC) ===== */
     .workspace { display: flex; flex: 1; overflow: hidden; }
     .sidebar {
       width: 170px; background: #f8fafc; border-right: 1px solid var(--border);
-      overflow-y: auto; padding: 12px 10px; display: flex; flex-direction: column; gap: 10px;
+      overflow-y: auto; padding: 12px 10px; display: flex; flex-direction: column; gap: 10px; flex-shrink: 0;
     }
     .thumb-item {
       background: #fff; border: 2px solid transparent; border-radius: 8px;
@@ -88,7 +90,10 @@
     .thumb-label { font-size: 12px; font-weight: 600; color: var(--muted); margin-top: 4px; }
     .thumb-item.active .thumb-label { color: var(--primary); }
 
-    .viewer { flex: 1; overflow: auto; display: flex; justify-content: center; align-items: flex-start; padding: 24px; }
+    .viewer {
+      flex: 1; overflow: auto; display: flex; flex-direction: column;
+      align-items: center; padding: 24px; gap: 20px; position: relative;
+    }
     .empty-state {
       margin: auto; text-align: center; background: #fff; padding: 40px 50px;
       border-radius: 12px; border: 2px dashed #94a3b8; cursor: pointer;
@@ -97,8 +102,21 @@
     .empty-state h2 { margin: 0 0 8px; color: var(--primary); font-size: 19px; }
     .empty-state p { margin: 0; color: var(--muted); font-size: 13px; }
 
-    .stage-wrap { position: relative; box-shadow: 0 6px 24px rgba(0,0,0,0.18); background: #fff; display: none; }
-    #pdf-canvas { display: block; }
+    .pages-container {
+      display: none; flex-direction: column; align-items: center; gap: 20px;
+    }
+    .page-slot {
+      position: relative; background: #fff;
+      box-shadow: 0 4px 18px rgba(0,0,0,0.16);
+      border: 2px solid transparent; transition: border-color 0.15s;
+    }
+    .page-slot.active-page { border-color: var(--primary); }
+    .page-slot canvas.pdf-page-canvas { display: block; }
+    .page-slot img.anno-preview {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none; display: none;
+    }
+    #anno-host { position: absolute; top: 0; left: 0; z-index: 5; }
     .canvas-container { position: absolute !important; top: 0; left: 0; }
 
     .statusbar {
@@ -108,6 +126,7 @@
     }
     #status-text, #org-status { font-weight: 600; color: var(--primary); }
 
+    /* ===== VIEW 2: GỘP & TÁCH PDF ===== */
     .org-main { flex: 1; overflow-y: auto; padding: 20px; }
     .org-container { max-width: 1360px; margin: 0 auto; }
     .dropzone {
@@ -186,9 +205,9 @@
         <button id="btn-undo" onclick="undo()" disabled>↩️ Undo</button>
         <button class="btn-danger" id="btn-del" onclick="deleteSelectedObj()" disabled>🗑️ Xóa</button>
         <div class="divider"></div>
-        <button id="btn-zoom-out" onclick="changeZoom(-0.2)" disabled>➖</button>
-        <span id="zoom-label" style="font-size:13px;font-weight:600;min-width:44px;text-align:center;">100%</span>
-        <button id="btn-zoom-in" onclick="changeZoom(0.2)" disabled>➕</button>
+        <button id="btn-zoom-out" onclick="changeZoom(-0.15)" disabled title="Thu nhỏ PDF (Ctrl + Cuộn xuống)">➖</button>
+        <span id="zoom-label" style="font-size:13px;font-weight:600;min-width:46px;text-align:center;">100%</span>
+        <button id="btn-zoom-in" onclick="changeZoom(0.15)" disabled title="Phóng to PDF (Ctrl + Cuộn lên)">➕</button>
       </div>
     </div>
 
@@ -197,20 +216,20 @@
       <div class="viewer" id="viewer">
         <div class="empty-state" id="empty-state" onclick="document.getElementById('pdf-input').click()">
           <h2>Mở file PDF để xem & chỉnh sửa</h2>
-          <p>Kéo thả file PDF vào đây hoặc bấm để chọn • Xử lý 100% tại máy</p>
+          <p>Kéo thả file PDF vào đây hoặc bấm để chọn • Giữ Ctrl + Cuộn chuột để zoom riêng trang PDF</p>
         </div>
-        <div class="stage-wrap" id="stage-wrap">
-          <canvas id="pdf-canvas"></canvas>
-          <canvas id="anno-canvas"></canvas>
-        </div>
+        <div class="pages-container" id="pages-container"></div>
       </div>
     </div>
 
     <div class="statusbar">
       <div id="page-info">Chưa mở file nào</div>
-      <div id="status-text"></div>
+      <div id="status-text">Mẹo: Giữ Ctrl + Cuộn chuột để phóng to/thu nhỏ trang PDF</div>
     </div>
   </div>
+
+  <!-- Host chứa lớp vẽ Fabric.js (di chuyển linh hoạt sang trang đang chọn) -->
+  <div id="anno-host" style="display:none;"><canvas id="anno-canvas"></canvas></div>
 
   <!-- TAB 2: GỘP & TÁCH PDF -->
   <div id="view-organizer" class="app-view">
@@ -265,14 +284,42 @@
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
-    // PHẦN 1: XEM & SỬA PDF
-    let originalPdfBytes = null, originalFileName = 'TaiLieu.pdf', pdfJsDoc = null;
-    let currentPage = 1, totalPages = 0, currentZoom = 1.2;
-    let baseSizes = {}, pageAnnotations = {}, historyStack = [], isRestoringHistory = false;
-    let currentTool = 'select', isDrawingShape = false, shapeStart = null, activeShape = null;
+    // =========================================================================
+    // CHẶN ZOOM TRÌNH DUYỆT -> CHUYỂN THÀNH ZOOM RIÊNG CỦA PDF
+    // =========================================================================
+    window.addEventListener('wheel', (e) => {
+      if (e.ctrlKey) {
+        e.preventDefault();
+        if (document.getElementById('view-editor').classList.contains('active') && pdfJsDoc) {
+          changeZoom(e.deltaY < 0 ? 0.15 : -0.15);
+        }
+      }
+    }, { passive: false });
 
-    const pdfCanvas = document.getElementById('pdf-canvas');
-    const pdfCtx = pdfCanvas.getContext('2d');
+    window.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && ['+', '-', '=', '0'].includes(e.key)) {
+        if (document.getElementById('view-editor').classList.contains('active') && pdfJsDoc) {
+          e.preventDefault();
+          if (e.key === '+' || e.key === '=') changeZoom(0.15);
+          else if (e.key === '-') changeZoom(-0.15);
+          else if (e.key === '0') setZoom(1.0);
+        }
+      }
+    });
+
+    // =========================================================================
+    // PHẦN 1: XEM & SỬA PDF (CUỘN LIÊN TỤC)
+    // =========================================================================
+    let originalPdfBytes = null, originalFileName = 'TaiLieu.pdf', pdfJsDoc = null;
+    let currentPage = 1, totalPages = 0, currentZoom = 1.0;
+    let baseSizes = {}, pageAnnotations = {}, pagePreviewUrls = {};
+    let historyStack = [], isRestoringHistory = false;
+    let currentTool = 'select', isDrawingShape = false, shapeStart = null, activeShape = null;
+    let renderToken = 0;
+
+    const viewerEl = document.getElementById('viewer');
+    const pagesContainer = document.getElementById('pages-container');
+    const annoHost = document.getElementById('anno-host');
     const fabricCanvas = new fabric.Canvas('anno-canvas', { preserveObjectStacking: true });
     const setEditorStatus = (msg) => document.getElementById('status-text').textContent = msg;
 
@@ -281,7 +328,6 @@
       e.target.value = '';
     });
 
-    const viewerEl = document.getElementById('viewer');
     viewerEl.addEventListener('dragover', e => e.preventDefault());
     viewerEl.addEventListener('drop', e => {
       e.preventDefault();
@@ -298,16 +344,18 @@
         totalPages = pdfJsDoc.numPages;
         currentPage = 1;
         pageAnnotations = {};
+        pagePreviewUrls = {};
         baseSizes = {};
 
         document.getElementById('empty-state').style.display = 'none';
-        document.getElementById('stage-wrap').style.display = 'block';
+        pagesContainer.style.display = 'flex';
         ['btn-export', 'btn-img', 'btn-undo', 'btn-del', 'btn-zoom-in', 'btn-zoom-out'].forEach(id => {
           document.getElementById(id).disabled = false;
         });
 
-        await buildSidebar();
-        await renderPage(1);
+        await buildSidebarAndSlots();
+        await renderAllPages();
+        await activatePage(1, false);
         setEditorStatus('Đã mở thành công!');
         setTimeout(() => setEditorStatus(''), 2000);
       } catch (err) {
@@ -316,15 +364,21 @@
       }
     }
 
-    async function buildSidebar() {
+    async function buildSidebarAndSlots() {
       const sidebar = document.getElementById('sidebar');
       sidebar.innerHTML = '';
+      // Giữ lại annoHost trước khi xóa pagesContainer
+      document.body.appendChild(annoHost);
+      annoHost.style.display = 'none';
+      pagesContainer.innerHTML = '';
+
       for (let i = 1; i <= totalPages; i++) {
         const page = await pdfJsDoc.getPage(i);
         const baseVp = page.getViewport({ scale: 1.0 });
         baseSizes[i] = { width: baseVp.width, height: baseVp.height };
 
-        const thumbVp = page.getViewport({ scale: 0.25 });
+        // Thumbnail bên trái
+        const thumbVp = page.getViewport({ scale: 0.22 });
         const c = document.createElement('canvas');
         c.width = thumbVp.width; c.height = thumbVp.height;
         await page.render({ canvasContext: c.getContext('2d'), viewport: thumbVp }).promise;
@@ -332,34 +386,103 @@
         const div = document.createElement('div');
         div.className = 'thumb-item' + (i === 1 ? ' active' : '');
         div.dataset.page = i;
-        div.innerHTML = `<img src="${c.toDataURL('image/jpeg', 0.75)}" /><div class="thumb-label">Trang ${i}</div>`;
-        div.onclick = () => switchPage(i);
+        div.innerHTML = `<img src="${c.toDataURL('image/jpeg', 0.72)}" /><div class="thumb-label">Trang ${i}</div>`;
+        div.onclick = () => activatePage(i, true);
         sidebar.appendChild(div);
+
+        // Khung trang xếp dọc trong viewer
+        const slot = document.createElement('div');
+        slot.className = 'page-slot';
+        slot.dataset.page = i;
+        slot.innerHTML = `<canvas class="pdf-page-canvas"></canvas><img class="anno-preview" />`;
+        slot.addEventListener('mousedown', () => {
+          if (currentPage !== i) activatePage(i, false);
+        });
+        pagesContainer.appendChild(slot);
       }
     }
 
-    async function switchPage(num) {
-      if (num === currentPage || num < 1 || num > totalPages) return;
-      saveCurrentPageAnnotations();
-      currentPage = num;
-      document.querySelectorAll('.thumb-item').forEach(el => el.classList.toggle('active', Number(el.dataset.page) === num));
-      await renderPage(num);
+    async function renderAllPages() {
+      const myToken = ++renderToken;
+      document.getElementById('zoom-label').textContent = Math.round(currentZoom * 100) + '%';
+
+      const slots = pagesContainer.querySelectorAll('.page-slot');
+      for (let i = 1; i <= totalPages; i++) {
+        if (myToken !== renderToken) return; // Hủy nếu người dùng tiếp tục zoom
+        const slot = slots[i - 1];
+        const canvas = slot.querySelector('.pdf-page-canvas');
+        const page = await pdfJsDoc.getPage(i);
+        const vp = page.getViewport({ scale: currentZoom });
+
+        slot.style.width = vp.width + 'px';
+        slot.style.height = vp.height + 'px';
+        canvas.width = vp.width;
+        canvas.height = vp.height;
+
+        await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+      }
+
+      // Cập nhật lại kích thước lớp vẽ trên trang đang chọn
+      if (myToken === renderToken) {
+        const size = baseSizes[currentPage];
+        if (size) {
+          fabricCanvas.setDimensions({ width: size.width * currentZoom, height: size.height * currentZoom });
+          fabricCanvas.setZoom(currentZoom);
+          fabricCanvas.renderAll();
+        }
+      }
     }
 
     function saveCurrentPageAnnotations() {
       if (!pdfJsDoc) return;
       const json = fabricCanvas.toJSON();
-      if (json.objects && json.objects.length > 0) pageAnnotations[currentPage] = json;
-      else delete pageAnnotations[currentPage];
+      const slot = pagesContainer.querySelector(`.page-slot[data-page="${currentPage}"]`);
+      const previewImg = slot ? slot.querySelector('.anno-preview') : null;
+
+      if (json.objects && json.objects.length > 0) {
+        pageAnnotations[currentPage] = json;
+        const dataUrl = fabricCanvas.toDataURL({ format: 'png', multiplier: 1 });
+        pagePreviewUrls[currentPage] = dataUrl;
+        if (previewImg) { previewImg.src = dataUrl; previewImg.style.display = 'block'; }
+      } else {
+        delete pageAnnotations[currentPage];
+        delete pagePreviewUrls[currentPage];
+        if (previewImg) previewImg.style.display = 'none';
+      }
     }
 
-    async function renderPage(num) {
-      const page = await pdfJsDoc.getPage(num);
-      const viewport = page.getViewport({ scale: currentZoom });
-      pdfCanvas.width = viewport.width; pdfCanvas.height = viewport.height;
-      await page.render({ canvasContext: pdfCtx, viewport }).promise;
+    async function activatePage(num, shouldScroll) {
+      if (!pdfJsDoc || num < 1 || num > totalPages) return;
+      if (annoHost.style.display === 'block' && currentPage !== num) {
+        saveCurrentPageAnnotations();
+      }
 
-      fabricCanvas.setDimensions({ width: viewport.width, height: viewport.height });
+      currentPage = num;
+      document.querySelectorAll('.thumb-item').forEach(el => {
+        const isAct = Number(el.dataset.page) === num;
+        el.classList.toggle('active', isAct);
+        if (isAct && !shouldScroll) el.scrollIntoView({ block: 'nearest' });
+      });
+
+      const slots = pagesContainer.querySelectorAll('.page-slot');
+      slots.forEach(s => s.classList.toggle('active-page', Number(s.dataset.page) === num));
+
+      const targetSlot = pagesContainer.querySelector(`.page-slot[data-page="${num}"]`);
+      if (!targetSlot) return;
+
+      if (shouldScroll) {
+        targetSlot.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+
+      // Ẩn ảnh preview tĩnh của trang đang chọn và gắn lớp Fabric.js trực tiếp lên
+      const previewImg = targetSlot.querySelector('.anno-preview');
+      if (previewImg) previewImg.style.display = 'none';
+
+      targetSlot.appendChild(annoHost);
+      annoHost.style.display = 'block';
+
+      const size = baseSizes[num];
+      fabricCanvas.setDimensions({ width: size.width * currentZoom, height: size.height * currentZoom });
       fabricCanvas.setZoom(currentZoom);
 
       isRestoringHistory = true;
@@ -371,19 +494,48 @@
       historyStack = [JSON.stringify(fabricCanvas.toJSON())];
 
       document.getElementById('page-info').textContent = `${originalFileName} • Trang ${currentPage} / ${totalPages}`;
-      document.getElementById('zoom-label').textContent = Math.round(currentZoom * 100) + '%';
       applyToolMode();
     }
 
-    async function changeZoom(delta) {
+    // Tự động cập nhật số trang trên thanh trạng thái & sidebar khi cuộn chuột
+    let scrollTimer = null;
+    viewerEl.addEventListener('scroll', () => {
       if (!pdfJsDoc) return;
-      const next = Math.min(2.6, Math.max(0.6, +(currentZoom + delta).toFixed(2)));
+      clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(() => {
+        const viewerRect = viewerEl.getBoundingClientRect();
+        const midY = viewerRect.top + viewerRect.height * 0.35;
+        let visiblePage = currentPage;
+        for (const slot of pagesContainer.querySelectorAll('.page-slot')) {
+          const r = slot.getBoundingClientRect();
+          if (r.top <= midY && r.bottom >= midY) {
+            visiblePage = Number(slot.dataset.page);
+            break;
+          }
+        }
+        if (visiblePage !== currentPage) {
+          document.getElementById('page-info').textContent = `${originalFileName} • Trang ${visiblePage} / ${totalPages}`;
+          document.querySelectorAll('.thumb-item').forEach(el => {
+            el.classList.toggle('active', Number(el.dataset.page) === visiblePage);
+          });
+        }
+      }, 100);
+    });
+
+    let zoomTimer = null;
+    function setZoom(val) {
+      if (!pdfJsDoc) return;
+      const next = Math.min(2.5, Math.max(0.4, +val.toFixed(2)));
       if (next === currentZoom) return;
-      saveCurrentPageAnnotations();
       currentZoom = next;
-      await renderPage(currentPage);
+      document.getElementById('zoom-label').textContent = Math.round(currentZoom * 100) + '%';
+      clearTimeout(zoomTimer);
+      zoomTimer = setTimeout(() => renderAllPages(), 80);
     }
 
+    function changeZoom(delta) { setZoom(currentZoom + delta); }
+
+    // ===== CÔNG CỤ VẼ & GHI CHÚ =====
     document.querySelectorAll('.tool-btn').forEach(btn => btn.addEventListener('click', () => setTool(btn.dataset.tool)));
     function setTool(tool) {
       currentTool = tool;
@@ -556,7 +708,9 @@
       }
     }
 
+    // =========================================================================
     // PHẦN 2: GỘP & TÁCH PDF TRỰC QUAN
+    // =========================================================================
     const sourceFiles = new Map();
     let orgPages = [], orgFileCounter = 0, orgPageCounter = 0;
     const grid = document.getElementById('page-grid');
