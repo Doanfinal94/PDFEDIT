@@ -160,6 +160,15 @@
     .card-info { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 8px; text-align: center; }
     .card-actions { display: flex; gap: 6px; }
     .icon-btn { flex: 1; padding: 5px; font-size: 12px; justify-content: center; }
+
+    /* Ẩn toàn bộ giao diện nếu người dùng bấm In từ menu 3 chấm của trình duyệt */
+    @media print {
+      body { height: auto; overflow: visible; background: #fff; }
+      .app-nav, .topbar, .sidebar, .statusbar, #view-organizer, .empty-state { display: none !important; }
+      .workspace, .viewer, .pages-container { display: block !important; overflow: visible !important; padding: 0 !important; margin: 0 !important; }
+      .page-slot { box-shadow: none !important; border: none !important; margin: 0 auto !important; page-break-after: always; break-after: page; }
+      .page-slot:last-child { page-break-after: auto; break-after: auto; }
+    }
   </style>
 </head>
 <body>
@@ -182,6 +191,7 @@
         <button class="btn-primary" onclick="document.getElementById('pdf-input').click()">📂 Mở PDF</button>
         <input type="file" id="pdf-input" accept="application/pdf" hidden />
         <button class="btn-success" id="btn-export" onclick="exportEditedPDF()" disabled>💾 Xuất PDF</button>
+        <button id="btn-print" onclick="printPDF()" disabled title="In file PDF (Ctrl+P)">🖨️ In PDF</button>
       </div>
 
       <div class="group">
@@ -349,7 +359,7 @@
 
         document.getElementById('empty-state').style.display = 'none';
         pagesContainer.style.display = 'flex';
-        ['btn-export', 'btn-img', 'btn-undo', 'btn-del', 'btn-zoom-in', 'btn-zoom-out'].forEach(id => {
+        ['btn-export', 'btn-print', 'btn-img', 'btn-undo', 'btn-del', 'btn-zoom-in', 'btn-zoom-out'].forEach(id => {
           document.getElementById(id).disabled = false;
         });
 
@@ -673,31 +683,72 @@
       if (active && active.isEditing) return;
       if (e.key === 'Delete' || e.key === 'Backspace') deleteSelectedObj();
       else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
+      else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') { e.preventDefault(); printPDF(); }
     });
+
+    async function buildFinalPdfBytes() {
+      saveCurrentPageAnnotations();
+      const hasEdits = Object.values(pageAnnotations).some(j => j && j.objects && j.objects.length > 0);
+      if (!hasEdits) return originalPdfBytes;
+
+      const pdfDoc = await PDFDocument.load(originalPdfBytes, { ignoreEncryption: true });
+      const pages = pdfDoc.getPages();
+      for (const [pageStr, json] of Object.entries(pageAnnotations)) {
+        const pageNum = Number(pageStr), size = baseSizes[pageNum];
+        if (!size || !json.objects || !json.objects.length) continue;
+        const staticCanvas = new fabric.StaticCanvas(document.createElement('canvas'), { width: size.width, height: size.height });
+        await new Promise(resolve => staticCanvas.loadFromJSON(json, () => { staticCanvas.renderAll(); resolve(); }));
+        const pngImage = await pdfDoc.embedPng(staticCanvas.toDataURL({ format: 'png', multiplier: 2.5 }));
+        const pdfPage = pages[pageNum - 1], { width, height } = pdfPage.getSize();
+        pdfPage.drawImage(pngImage, { x: 0, y: 0, width, height });
+        staticCanvas.dispose();
+      }
+      return await pdfDoc.save();
+    }
 
     async function exportEditedPDF() {
       if (!originalPdfBytes) return;
-      saveCurrentPageAnnotations();
       setEditorStatus('Đang xuất file PDF...');
       try {
-        const pdfDoc = await PDFDocument.load(originalPdfBytes, { ignoreEncryption: true });
-        const pages = pdfDoc.getPages();
-        for (const [pageStr, json] of Object.entries(pageAnnotations)) {
-          const pageNum = Number(pageStr), size = baseSizes[pageNum];
-          if (!size || !json.objects || !json.objects.length) continue;
-          const staticCanvas = new fabric.StaticCanvas(document.createElement('canvas'), { width: size.width, height: size.height });
-          await new Promise(resolve => staticCanvas.loadFromJSON(json, () => { staticCanvas.renderAll(); resolve(); }));
-          const pngImage = await pdfDoc.embedPng(staticCanvas.toDataURL({ format: 'png', multiplier: 2.5 }));
-          const pdfPage = pages[pageNum - 1], { width, height } = pdfPage.getSize();
-          pdfPage.drawImage(pngImage, { x: 0, y: 0, width, height });
-          staticCanvas.dispose();
-        }
-        const outBytes = await pdfDoc.save();
+        const outBytes = await buildFinalPdfBytes();
         downloadBlob(new Blob([outBytes], { type: 'application/pdf' }), originalFileName.replace(/\.pdf$/i, '') + '_DaSua.pdf');
         setEditorStatus('Đã xuất file PDF thành công!');
         setTimeout(() => setEditorStatus(''), 3000);
       } catch (err) {
         alert('Lỗi khi xuất PDF: ' + err.message); setEditorStatus('');
+      }
+    }
+
+    let printFrame = null;
+    async function printPDF() {
+      if (!originalPdfBytes) return;
+      setEditorStatus('Đang chuẩn bị bản in chuẩn vector...');
+      try {
+        const outBytes = await buildFinalPdfBytes();
+        const blob = new Blob([outBytes], { type: 'application/pdf' });
+        const url = URL.createObjectURL(blob);
+
+        if (printFrame) printFrame.remove();
+        printFrame = document.createElement('iframe');
+        printFrame.style.position = 'fixed';
+        printFrame.style.right = '0';
+        printFrame.style.bottom = '0';
+        printFrame.style.width = '0';
+        printFrame.style.height = '0';
+        printFrame.style.border = '0';
+        printFrame.src = url;
+        document.body.appendChild(printFrame);
+
+        printFrame.onload = () => {
+          setEditorStatus('');
+          setTimeout(() => {
+            printFrame.contentWindow.focus();
+            printFrame.contentWindow.print();
+          }, 250);
+        };
+      } catch (err) {
+        alert('Lỗi khi in PDF: ' + err.message);
+        setEditorStatus('');
       }
     }
 
